@@ -132,6 +132,7 @@ if __name__ == "__main__":
         data = fetch_data()
         structured_json = get_ai_structured_data(data)
         mermaid_code = build_mermaid_code(structured_json)
-        render_styled_mindmap(mermaid_code)
+        item_count = 1 + sum(1 + len(v) if isinstance(v, list) else 2 for v in structured_json.values())
+        render_styled_mindmap(mermaid_code, item_count=item_count)
     except Exception as e:
         print(f"❌ Run failed: {repr(e)}")

@@ -2,15 +2,30 @@ import os
 import webbrowser
 from datetime import datetime
 
-def render_styled_mindmap(mermaid_code, output_file="mindmap_preview.html"):
+def _scale_for_count(item_count):
+    """Return (fontSize, scale) for adaptive sizing. More items = smaller."""
+    if item_count <= 15:
+        return "15px", 1.0
+    if item_count <= 30:
+        return "13px", 0.85
+    if item_count <= 50:
+        return "11px", 0.7
+    if item_count <= 80:
+        return "10px", 0.6
+    return "9px", 0.5
+
+
+def render_styled_mindmap(mermaid_code, output_file="mindmap_preview.html", item_count=10):
     """
     Styled mindmap renderer.
     Escapes < > & to prevent HTML breakage; keeps quotes for Mermaid parsing.
+    Scales down when item_count is large to avoid crowding.
     """
     safe_mermaid_code = (mermaid_code.replace("&", "&amp;")
                                         .replace("<", "&lt;")
                                         .replace(">", "&gt;"))
 
+    fontSize, scale = _scale_for_count(item_count)
     time_now = datetime.now().strftime('%Y-%m-%d %H:%M')
 
     html_template = f"""
@@ -23,7 +38,7 @@ def render_styled_mindmap(mermaid_code, output_file="mindmap_preview.html"):
         <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
         <script>
             mermaid.initialize({{ 
-                startOnLoad: true, 
+                startOnLoad: false, 
                 theme: 'base',
                 securityLevel: 'loose',
                 themeVariables: {{
@@ -33,9 +48,16 @@ def render_styled_mindmap(mermaid_code, output_file="mindmap_preview.html"):
                     'lineColor': '#818cf8',
                     'secondaryColor': '#e0e7ff',
                     'tertiaryColor': '#f5f3ff',
-                    'fontSize': '15px',
+                    'fontSize': '{fontSize}',
                     'fontFamily': 'DM Sans, sans-serif'
                 }}
+            }});
+            document.addEventListener('DOMContentLoaded', function() {{
+                const scale = {scale};
+                mermaid.run({{ nodes: document.querySelectorAll('.mermaid') }}).then(function() {{
+                    const svg = document.querySelector('.mermaid svg');
+                    if (svg) svg.style.transform = 'scale(' + scale + ')';
+                }});
             }});
         </script>
         <style>
@@ -65,8 +87,11 @@ def render_styled_mindmap(mermaid_code, output_file="mindmap_preview.html"):
                 margin: 0 auto 24px;
                 max-width: 95%;
                 color: #1e293b;
+                overflow: auto;
+                max-height: 90vh;
             }}
-            .card .mermaid {{ background: transparent !important; }}
+            .card .mermaid {{ background: transparent !important; min-height: 200px; }}
+            .card .mermaid svg {{ transform-origin: top left; }}
             .footer {{ 
                 color: #94a3b8; 
                 font-size: 0.875rem; 
