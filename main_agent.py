@@ -8,14 +8,14 @@ from email.utils import parsedate_to_datetime
 from anthropic import Anthropic
 from visualizer import render_styled_mindmap
 
-# 强制 UTF-8
+# Force UTF-8 on Windows
 if sys.platform == "win32":
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 def load_config():
     if not os.path.exists("config.json"):
-        print("❌ 未找到 config.json，请复制 config.example.json 为 config.json 并填入你的 API Key")
+        print("❌ config.json not found. Copy config.example.json to config.json and add your API Key")
         print("   cp config.example.json config.json")
         sys.exit(1)
     with open("config.json", "r", encoding="utf-8") as f:
@@ -25,7 +25,7 @@ CONFIG = load_config()
 client = Anthropic(api_key=CONFIG["ANTHROPIC_API_KEY"])
 
 def parse_date(date_str):
-    """解析邮件日期+小时，如 '03-07 14:30'"""
+    """Parse email date+time, e.g. '03-07 14:30'"""
     if not date_str or not date_str.strip():
         return "Unknown"
     try:
@@ -42,7 +42,7 @@ def parse_date(date_str):
             return "Unknown"
 
 def fetch_data():
-    print(f"🛰️ 正在抓取最近的 {CONFIG['MAX_EMAILS']} 封邮件...")
+    print(f"🛰️ Fetching the latest {CONFIG['MAX_EMAILS']} emails...")
     params = json.dumps({"userId": CONFIG["GMAIL_USER_ID"], "maxResults": CONFIG["MAX_EMAILS"]})
     res = subprocess.run(["gws", "gmail", "users", "messages", "list", "--params", params],
                          capture_output=True, text=True, encoding='utf-8', shell=True)
@@ -50,7 +50,7 @@ def fetch_data():
     try:
         data = json.loads(res.stdout)
     except json.JSONDecodeError:
-        raise RuntimeError(f"Gmail API 返回无效 JSON: {res.stderr or res.stdout[:200]}")
+        raise RuntimeError(f"Gmail API returned invalid JSON: {res.stderr or res.stdout[:200]}")
 
     msg_ids = [m['id'] for m in data.get('messages', [])]
     emails = []
@@ -73,7 +73,7 @@ def fetch_data():
     return emails
 
 def clean_text(text):
-    """只移除真正会破坏 Mermaid 解析的字符"""
+    """Remove characters that break Mermaid parsing"""
     if not text:
         return ""
     s = str(text).replace('"', "'").replace("\n", " ").replace("\\", " ")
@@ -82,18 +82,18 @@ def clean_text(text):
     return " ".join(s.split()).strip()
 
 def get_ai_structured_data(emails):
-    print("🧠 Claude Haiku 正在分析并分类...")
-    prompt = f"""你是 Anyue 的个人助手。背景：{CONFIG['MY_CONTEXT']}。
-请将以下邮件按主题分类，返回纯 JSON。
+    print("🧠 Claude Haiku is analyzing and classifying...")
+    prompt = f"""You are Anyue's personal assistant. Context: {CONFIG['MY_CONTEXT']}.
+Classify the following emails by topic and return pure JSON only.
 
-要求：
-1. 格式：{{"分类名": ["邮件简述1", "邮件简述2"]}}
-2. 每个邮件简述：保留邮件中的日期时间信息，格式为"简述内容 MM-DD HH:MM"
-3. 分类名用简短的中文，如"银行通知"、"云服务"等
-4. 不要用特殊符号如 # $ () [] {{}} / 等
-5. 只返回纯 JSON，不要 markdown 代码块，不要任何解释
+Requirements:
+1. Format: {{"CategoryName": ["Brief1 MM-DD HH:MM", "Brief2 MM-DD HH:MM"]}}
+2. Each brief: keep date/time from the email, format as "brief content MM-DD HH:MM"
+3. Use short English category names, e.g. "Bank Notifications", "Cloud Services"
+4. No special symbols like # $ () [] {{}} / etc.
+5. Return pure JSON only, no markdown code blocks, no explanation
 
-邮件数据：{json.dumps(emails, ensure_ascii=False)}"""
+Emails: {json.dumps(emails, ensure_ascii=False)}"""
 
     response = client.messages.create(
         model="claude-haiku-4-5",
@@ -108,10 +108,10 @@ def get_ai_structured_data(emails):
     try:
         return json.loads(content)
     except json.JSONDecodeError as e:
-        raise ValueError(f"AI 返回的 JSON 解析失败: {e}\n原始内容: {content[:300]}...")
+        raise ValueError(f"Failed to parse AI JSON: {e}\nRaw content: {content[:300]}...")
 
 def build_mermaid_code(structured_data):
-    """构建 Mermaid 思维导图代码"""
+    """Build Mermaid mindmap code"""
     if not isinstance(structured_data, dict):
         structured_data = {}
     lines = ["mindmap", "  hub((Anyue Intelligence Hub))"]
@@ -134,4 +134,4 @@ if __name__ == "__main__":
         mermaid_code = build_mermaid_code(structured_json)
         render_styled_mindmap(mermaid_code)
     except Exception as e:
-        print(f"❌ 运行失败: {repr(e)}")
+        print(f"❌ Run failed: {repr(e)}")

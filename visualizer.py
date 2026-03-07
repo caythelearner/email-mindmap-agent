@@ -4,8 +4,8 @@ from datetime import datetime
 
 def render_styled_mindmap(mermaid_code, output_file="mindmap_preview.html"):
     """
-    高颜值思维导图渲染引擎
-    仅转义 < > & 防止破坏 HTML，保留引号供 Mermaid 正确解析
+    Styled mindmap renderer.
+    Escapes < > & to prevent HTML breakage; keeps quotes for Mermaid parsing.
     """
     safe_mermaid_code = (mermaid_code.replace("&", "&amp;")
                                         .replace("<", "&lt;")
@@ -90,6 +90,6 @@ def render_styled_mindmap(mermaid_code, output_file="mindmap_preview.html"):
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(html_template)
 
-    print("高颜值渲染引擎已就绪！")
+    print("✅ Mindmap rendered and opened in browser.")
     file_url = "file:///" + file_path.replace("\\", "/")
     webbrowser.open(file_url)
