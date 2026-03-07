@@ -1,6 +1,7 @@
 {
-    "ANTHROPIC_API_KEY": "your-anthropic-api-key-here",
+    "_comment": "复制此文件为 config.json 并填入真实配置，切勿提交 config.json",
+    "ANTHROPIC_API_KEY": "sk-ant-xxxxxxxx",
     "GMAIL_USER_ID": "me",
     "MAX_EMAILS": 10,
-    "MY_CONTEXT": "你的个人背景描述，用于 AI 更好地理解邮件上下文"
+    "MY_CONTEXT": "你的职业/兴趣/背景简述，帮助 AI 更好理解邮件上下文"
 }
