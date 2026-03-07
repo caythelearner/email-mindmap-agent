@@ -9,6 +9,10 @@ Analyze Gmail with Claude AI and generate mind map visualizations.
 - Generate Mermaid mind maps with date/time
 - Auto-open a styled HTML preview in the browser
 
+## Example
+
+![Mindmap Preview](assets/mindmap-preview.png)
+
 ## Requirements
 
 - Python 3.8+
