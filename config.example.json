@@ -1,0 +1,6 @@
+{
+    "ANTHROPIC_API_KEY": "your-anthropic-api-key-here",
+    "GMAIL_USER_ID": "me",
+    "MAX_EMAILS": 10,
+    "MY_CONTEXT": "你的个人背景描述，用于 AI 更好地理解邮件上下文"
+}
