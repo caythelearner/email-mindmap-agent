@@ -20,6 +20,7 @@
 ```bash
 # 克隆项目
 git clone https://github.com/YOUR_USERNAME/email-mindmap-agent.git
+# 将 YOUR_USERNAME 替换为你的 GitHub 用户名
 cd email-mindmap-agent
 
 # 安装依赖
