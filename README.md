@@ -1,61 +1,60 @@
 # 📬 Email Mindmap Agent
 
-用 Claude AI 分析 Gmail 邮件，自动生成思维导图可视化。
+Analyze Gmail with Claude AI and generate mind map visualizations.
 
-## 功能
+## Features
 
-- 抓取最近 N 封 Gmail 邮件
-- 使用 Claude Haiku 按主题分类
-- 生成带日期时间的 Mermaid 思维导图
-- 自动在浏览器中打开高颜值 HTML 预览
+- Fetch the most recent N Gmail emails
+- Use Claude Haiku to classify emails by topic
+- Generate Mermaid mind maps with date/time
+- Auto-open a styled HTML preview in the browser
 
-## 环境要求
+## Requirements
 
 - Python 3.8+
-- [gws](https://github.com/nicksanders/gws)（Gmail 命令行工具，需完成 OAuth 授权）
+- [gws](https://github.com/googleworkspace/cli) (Google Workspace CLI for Gmail, requires OAuth)
 - Anthropic API Key
 
-## 安装
+## Installation
 
 ```bash
-# 克隆项目
-git clone https://github.com/YOUR_USERNAME/email-mindmap-agent.git
-# 将 YOUR_USERNAME 替换为你的 GitHub 用户名
+# Clone the repo
+git clone https://github.com/caythelearner/email-mindmap-agent.git
 cd email-mindmap-agent
 
-# 安装依赖
+# Install dependencies
 pip install -r requirements.txt
 
-# 配置
+# Configure
 cp config.example.json config.json
-# 编辑 config.json，填入你的 ANTHROPIC_API_KEY 和 MY_CONTEXT
+# Edit config.json with your ANTHROPIC_API_KEY and MY_CONTEXT
 ```
 
-## 配置说明
+## Configuration
 
-| 字段 | 说明 |
-|------|------|
-| ANTHROPIC_API_KEY | 在 [Anthropic Console](https://console.anthropic.com/) 申请 |
-| GMAIL_USER_ID | 通常填 `me` |
-| MAX_EMAILS | 抓取邮件数量，默认 10 |
-| MY_CONTEXT | 你的背景描述，帮助 AI 更好理解邮件 |
+| Field | Description |
+|-------|-------------|
+| ANTHROPIC_API_KEY | Get from [Anthropic Console](https://console.anthropic.com/) |
+| GMAIL_USER_ID | Usually `me` |
+| MAX_EMAILS | Number of emails to fetch, default 10 |
+| MY_CONTEXT | Your background/context to help AI understand emails better |
 
-## 使用
+## Usage
 
 ```bash
 python main_agent.py
 ```
 
-运行后会生成 `mindmap_preview.html` 并在浏览器中打开。
+This generates `mindmap_preview.html` and opens it in your browser.
 
-## Gmail 授权
+## Gmail Authorization
 
-需先安装并配置 gws：
+Install and configure gws first:
 
 ```bash
-# 安装 gws（见 https://github.com/nicksanders/gws）
+# Install gws (see https://github.com/googleworkspace/cli)
 gws auth login
-# 勾选 Gmail 相关权限
+# Grant Gmail permissions when prompted
 ```
 
 ## License
