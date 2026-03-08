@@ -10,7 +10,9 @@ Fetch your Gmail, analyze with Claude AI, and generate an interactive dashboard 
 
 ## Demo
 
-![Dashboard Preview](assets/dashboard-preview.png)
+📹 **[Watch demo video](https://github.com/caythelearner/email-mindmap-agent/releases/download/v1.0.0/example.mp4)** (5.8 MB)
+
+<video src="https://github.com/caythelearner/email-mindmap-agent/releases/download/v1.0.0/example.mp4" controls width="640"></video>
 
 ## Requirements
 
