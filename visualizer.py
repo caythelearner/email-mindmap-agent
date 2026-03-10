@@ -265,6 +265,78 @@ footer {
     color: var(--text-muted); font-size: 0.75rem;
     border-top: 1px solid var(--border);
 }
+
+.email-modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,0.65); backdrop-filter: blur(8px);
+    align-items: center; justify-content: center;
+    animation: modalBgIn 0.2s ease;
+}
+.email-modal-overlay.visible { display: flex; }
+@keyframes modalBgIn { from { opacity: 0; } to { opacity: 1; } }
+.email-modal {
+    background: var(--bg-card); border: 1px solid rgba(99,102,241,0.25);
+    border-radius: 18px; width: 90%; max-width: 640px; max-height: 80vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(99,102,241,0.1);
+    animation: modalIn 0.25s ease;
+}
+@keyframes modalIn {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.email-modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+}
+.email-modal-header h3 {
+    font-size: 1rem; font-weight: 600;
+    background: linear-gradient(135deg, #a5b4fc, #c4b5fd);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.email-modal-close {
+    width: 32px; height: 32px; border-radius: 8px;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--text-muted); font-size: 1.2rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+}
+.email-modal-close:hover { background: rgba(239,68,68,0.1); color: #f87171; border-color: rgba(239,68,68,0.3); }
+.email-modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
+.email-detail-card {
+    background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px; margin-bottom: 12px;
+    transition: border-color 0.2s;
+}
+.email-detail-card:last-child { margin-bottom: 0; }
+.email-detail-card:hover { border-color: rgba(99,102,241,0.3); }
+.email-detail-subject {
+    font-size: 0.95rem; font-weight: 600; color: var(--text-primary);
+    margin-bottom: 8px; line-height: 1.4;
+}
+.email-detail-date {
+    font-size: 0.78rem; color: var(--accent-cyan); font-weight: 500;
+    margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
+}
+.email-detail-snippet {
+    font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;
+    border-left: 3px solid rgba(99,102,241,0.3); padding-left: 14px;
+}
+.email-detail-label {
+    font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.06em; margin-bottom: 4px;
+}
+.email-modal-empty { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+.email-gmail-link {
+    display: block; margin-top: 12px; padding: 10px 14px;
+    background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2);
+    border-radius: 8px; color: #93c5fd; font-size: 0.82rem;
+    text-decoration: none; transition: all 0.2s; font-weight: 500;
+}
+.email-gmail-link:hover {
+    background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.4);
+    color: #bfdbfe;
+}
 </style>
 </head>
 <body>
@@ -290,7 +362,7 @@ footer {
     <div class="panel active" id="panel-mindmap">
         <div class="section-head">
             <h2>Email Mind Map</h2>
-            <p>Click nodes to expand/collapse &middot; Scroll to zoom &middot; Drag to pan</p>
+            <p>Click leaf nodes to view original email &middot; Scroll to zoom &middot; Drag to pan</p>
         </div>
         <div class="chart-wrap">
             <div class="chart-toolbar">
@@ -340,11 +412,22 @@ footer {
 
 <footer>Email Intelligence Hub &middot; Powered by Claude AI &middot; __TIME_NOW__</footer>
 
+<div class="email-modal-overlay" id="emailModal">
+    <div class="email-modal">
+        <div class="email-modal-header">
+            <h3>&#x1f4e7; Original Email Content</h3>
+            <button class="email-modal-close" id="emailModalClose">&times;</button>
+        </div>
+        <div class="email-modal-body" id="emailModalBody"></div>
+    </div>
+</div>
+
 <script>
 (function() {
     var categories = __CAT_JSON__;
     var wcRaw      = __WC_JSON__;
     var dlRaw      = __DL_JSON__;
+    var emailsRaw  = __EMAILS_JSON__;
 
     /* ===== Tab switching ===== */
     var tabs = document.querySelectorAll('.tab');
@@ -374,20 +457,50 @@ footer {
     ];
 
     /* ===== MIND MAP ===== */
+    function getOriginalSubject(idx) {
+        if (typeof idx === 'number' && idx >= 0 && idx < emailsRaw.length) {
+            var subj = emailsRaw[idx].subject || '';
+            return subj.length > 20 ? subj.substring(0, 18) + '..' : subj;
+        }
+        return '';
+    }
+
     function buildTree(cats) {
         var entries = Object.entries(cats);
         var children = entries.map(function(entry, i) {
             var cat = entry[0], items = entry[1];
             var c = COLORS[i % COLORS.length];
-            var list = Array.isArray(items) ? items : [String(items)];
+            var list = Array.isArray(items) ? items : [items];
             return {
                 name: cat,
                 itemStyle: { color: c, borderColor: c },
                 lineStyle: { color: c, opacity: 0.5 },
                 children: list.filter(Boolean).map(function(t) {
+                    var isObj = typeof t === 'object' && t !== null;
+                    var aiText = isObj ? String(t.text || '') : String(t);
+                    var rawIndices = isObj && Array.isArray(t.idx) ? t.idx : [];
+                    var indices = rawIndices.filter(function(idx) {
+                        return typeof idx === 'number' && idx >= 0 && idx < emailsRaw.length;
+                    });
+
+                    var label = aiText;
+                    if (indices.length === 1) {
+                        var origSubj = getOriginalSubject(indices[0]);
+                        if (origSubj && origSubj !== aiText) {
+                            label = aiText + ' [' + origSubj + ']';
+                        }
+                    }
+
+                    var hasValidLink = indices.length > 0;
                     return {
-                        name: String(t),
-                        itemStyle: { color: c, borderColor: c, opacity: 0.75 },
+                        name: label,
+                        aiText: aiText,
+                        emailIndices: indices,
+                        itemStyle: {
+                            color: c, borderColor: hasValidLink ? '#818cf8' : c,
+                            opacity: hasValidLink ? 0.85 : 0.5,
+                            borderWidth: hasValidLink ? 2 : 0
+                        },
                         lineStyle: { color: c, opacity: 0.35 }
                     };
                 })
@@ -415,6 +528,17 @@ footer {
                 formatter: function(p) {
                     if (p.data.children && p.data.children.length)
                         return '<b>' + p.name + '</b><br/><span style="color:#94a3b8">' + p.data.children.length + ' items</span>';
+                    if (p.data.emailIndices && p.data.emailIndices.length) {
+                        var tip = '<b>' + (p.data.aiText || p.name) + '</b>';
+                        p.data.emailIndices.forEach(function(idx) {
+                            if (idx >= 0 && idx < emailsRaw.length) {
+                                tip += '<br/><span style="color:#94a3b8;font-size:11px">Subject: ' + emailsRaw[idx].subject + '</span>';
+                            }
+                        });
+                        tip += '<br/><span style="color:#818cf8;font-size:11px">&#x1f517; Click to view original email</span>';
+                        return tip;
+                    }
+                    if (p.data.aiText) return p.data.aiText + '<br/><span style="color:#f87171;font-size:11px">&#x26a0; No linked email</span>';
                     return p.name;
                 }
             },
@@ -468,6 +592,59 @@ footer {
             this.classList.add('active');
             mmChart.setOption(mmOption(this.dataset.layout), true);
         });
+    });
+
+    /* ===== EMAIL DETAIL MODAL ===== */
+    var modalEl = document.getElementById('emailModal');
+    var modalBody = document.getElementById('emailModalBody');
+    var modalClose = document.getElementById('emailModalClose');
+
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function gmailSearchUrl(subject) {
+        return 'https://mail.google.com/mail/u/0/#search/' + encodeURIComponent('subject:' + subject);
+    }
+
+    function showEmailModal(indices) {
+        modalBody.innerHTML = '';
+        if (!indices || !indices.length || !emailsRaw.length) {
+            modalBody.innerHTML = '<div class="email-modal-empty">&#x26a0; No linked email found for this node.<br/><span style="font-size:0.82rem">This may indicate AI hallucination.</span></div>';
+            modalEl.classList.add('visible');
+            return;
+        }
+        indices.forEach(function(idx) {
+            if (idx < 0 || idx >= emailsRaw.length) return;
+            var email = emailsRaw[idx];
+            if (!email) return;
+            var card = document.createElement('div');
+            card.className = 'email-detail-card';
+            var subject = email.subject || 'No Subject';
+            card.innerHTML =
+                '<div class="email-detail-label">Subject</div>' +
+                '<div class="email-detail-subject">' + escapeHtml(subject) + '</div>' +
+                '<div class="email-detail-date">&#x1f4c5; ' + escapeHtml(email.date || 'Unknown') + '</div>' +
+                '<div class="email-detail-label">Email Snippet</div>' +
+                '<div class="email-detail-snippet">' + escapeHtml(email.snippet || 'No content available') + '</div>' +
+                '<a class="email-gmail-link" href="' + gmailSearchUrl(subject) + '" target="_blank" rel="noopener">&#x1f50d; Search in Gmail: ' + escapeHtml(subject.length > 40 ? subject.substring(0,38) + '..' : subject) + '</a>';
+            modalBody.appendChild(card);
+        });
+        modalEl.classList.add('visible');
+    }
+
+    function hideEmailModal() { modalEl.classList.remove('visible'); }
+    modalClose.addEventListener('click', hideEmailModal);
+    modalEl.addEventListener('click', function(e) { if (e.target === modalEl) hideEmailModal(); });
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') hideEmailModal(); });
+
+    mmChart.on('click', function(params) {
+        var data = params.data;
+        if (data && data.emailIndices && data.emailIndices.length > 0) {
+            showEmailModal(data.emailIndices);
+        }
     });
 
     /* ===== WORD CLOUD ===== */
@@ -627,18 +804,20 @@ footer {
 
 
 def render_dashboard(categories_data, wordcloud_data, deadline_data,
-                     output_file="dashboard.html"):
+                     emails_data=None, output_file="dashboard.html"):
     """Render the interactive dashboard HTML and open it in the browser."""
     time_now = datetime.now().strftime('%Y-%m-%d %H:%M')
     cat_json = json.dumps(categories_data, ensure_ascii=False)
     wc_json = json.dumps(wordcloud_data, ensure_ascii=False)
     dl_json = json.dumps(deadline_data, ensure_ascii=False)
+    emails_json = json.dumps(emails_data or [], ensure_ascii=False)
 
     html = HTML_TEMPLATE
     html = html.replace("__TIME_NOW__", time_now)
     html = html.replace("__CAT_JSON__", cat_json)
     html = html.replace("__WC_JSON__", wc_json)
     html = html.replace("__DL_JSON__", dl_json)
+    html = html.replace("__EMAILS_JSON__", emails_json)
 
     file_path = os.path.abspath(output_file)
     with open(file_path, "w", encoding="utf-8") as f:

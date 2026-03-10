@@ -4,7 +4,9 @@ Fetch your Gmail, analyze with Claude AI, and generate an interactive dashboard 
 
 ## Features
 
-- **Interactive Mind Map** — Emails classified by topic, rendered as a zoomable/pannable tree (radial, horizontal, or vertical layout). Click nodes to expand/collapse.
+- **Interactive Mind Map** — Emails classified by topic, rendered as a zoomable/pannable tree (radial, horizontal, or vertical layout). **Click any leaf node to view the original email** (subject, date, snippet) and verify AI accuracy.
+- **Anti-Hallucination** — Each mind map node is linked back to source emails via index tracking. AI is strictly prompted to only use provided emails. Invalid indices are auto-filtered with warnings.
+- **Gmail Quick Search** — Click "Search in Gmail" in the email detail popup to jump directly to the matching email in your inbox.
 - **Word Cloud** — AI-extracted keywords sized by importance. Hover for details.
 - **DDL Tracker** — Deadlines and action items extracted from emails, color-coded by urgency with countdown timers and filter buttons.
 
@@ -49,7 +51,7 @@ python main_agent.py
 
 This generates `dashboard.html` and opens it in your browser with three interactive panels:
 
-1. **Mind Map** — Switch between radial/horizontal/vertical layouts
+1. **Mind Map** — Switch between radial/horizontal/vertical layouts. Click leaf nodes to see original email content and verify AI summaries.
 2. **Word Cloud** — Visual keyword analysis with top-10 sidebar
 3. **DDL Tracker** — Filter by urgency (Urgent / This Week / Later)
 

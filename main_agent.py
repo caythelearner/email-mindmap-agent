@@ -92,22 +92,31 @@ def fetch_data():
 
 
 def get_ai_structured_data(emails):
-    """Classify emails into categories via Claude."""
+    """Classify emails into categories via Claude, with email index tracking."""
     print("Claude is classifying emails...")
+    indexed_emails = [{"index": i, **e} for i, e in enumerate(emails)]
+    max_idx = len(emails) - 1
     prompt = f"""You are a personal email assistant. Context about the user: {CONFIG['MY_CONTEXT']}.
 Classify the following emails by topic and return pure JSON only.
 
-Requirements:
-1. Format: {{"CategoryName": ["Brief1 MM-DD HH:MM", "Brief2 MM-DD HH:MM"]}}
-2. Each brief: keep date/time from the email, format as "brief content MM-DD HH:MM"
-3. Use short category names, e.g. "Banking", "Cloud Services", "Job Search"
-4. No special symbols like # $ () [] {{}} / etc.
-5. Return pure JSON only, no markdown code blocks, no explanation
+STRICT RULES (must follow):
+- You may ONLY use emails from the provided list. Do NOT fabricate, invent, or infer any emails not in the list.
+- Each item's "idx" field must contain ONLY valid index values from the email data (range 0~{max_idx}). Do NOT use out-of-range indices.
+- Each email should appear in exactly one category, no duplicates.
+- The "text" field must be based on the actual subject and snippet of the corresponding idx email(s). Do NOT generate content from nothing.
 
-Emails: {json.dumps(emails, ensure_ascii=False)}"""
+Format requirements:
+1. Format: {{"CategoryName": [{{"text": "Brief description", "idx": [0]}}]}}
+2. Each item's "text" field: summarize based on the original email subject, keep date info, format as "brief content MM-DD HH:MM"
+3. Each item's "idx" field: an array of original email index values this item corresponds to (must be real indices)
+4. Use short category names, e.g. "Banking", "Cloud Services", "Job Search"
+5. No special symbols like # $ () [] {{}} / etc.
+6. Return pure JSON only, no markdown code blocks, no explanation
+
+Emails ({len(emails)} total, index range 0~{max_idx}): {json.dumps(indexed_emails, ensure_ascii=False)}"""
 
     response = client.messages.create(
-        model="claude-haiku-4-5", max_tokens=2000,
+        model="claude-haiku-4-5", max_tokens=4000,
         messages=[{"role": "user", "content": prompt}])
     content = response.content[0].text.strip()
     if "```" in content:
@@ -182,15 +191,43 @@ Emails: {json.dumps(emails, ensure_ascii=False)}"""
         return []
 
 
+def validate_and_fix_indices(structured_data, email_count):
+    """Validate AI-returned idx values, filter out-of-range indices and warn."""
+    warned = False
+    for cat, items in structured_data.items():
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict) or 'idx' not in item:
+                continue
+            original = item['idx']
+            valid = [i for i in original
+                     if isinstance(i, int) and 0 <= i < email_count]
+            invalid = [i for i in original if i not in valid]
+            if invalid:
+                if not warned:
+                    print("Warning: AI returned invalid email indices "
+                          "(auto-filtered):")
+                    warned = True
+                print(f"  Category '{cat}' item "
+                      f"'{item.get('text', '?')[:30]}': "
+                      f"invalid idx {invalid} "
+                      f"(valid range 0~{email_count - 1})")
+            item['idx'] = valid
+    return structured_data
+
+
 if __name__ == "__main__":
     try:
         emails = fetch_data()
         structured_json = get_ai_structured_data(emails)
+        structured_json = validate_and_fix_indices(
+            structured_json, len(emails))
         wordcloud_data = get_wordcloud_data(emails)
         deadline_data = get_deadline_data(emails)
         output_path = os.path.join(SCRIPT_DIR, "dashboard.html")
         render_dashboard(structured_json, wordcloud_data, deadline_data,
-                         output_path)
+                         emails, output_path)
         print("Dashboard generated and opened!")
     except Exception as e:
         print(f"Run failed: {repr(e)}")
