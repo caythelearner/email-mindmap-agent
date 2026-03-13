@@ -262,6 +262,14 @@ main {
     border-radius: 14px; padding: 22px;
     transition: all 0.25s ease; position: relative; overflow: hidden;
 }
+.ddl-card.clickable {
+    cursor: pointer;
+}
+.ddl-card.clickable::after {
+    content: 'Click to view original email';
+    position: absolute; bottom: 12px; right: 18px;
+    font-size: 0.7rem; color: var(--accent-cyan); opacity: 0.8;
+}
 .ddl-card:hover {
     background: var(--bg-card-hover);
     border-color: rgba(99,102,241,0.25);
@@ -891,9 +899,23 @@ footer {
             return;
         }
 
+        function findIndicesBySource(source) {
+            if (!source || !emailsRaw.length) return [];
+            var src = String(source).trim().toLowerCase();
+            if (!src) return [];
+            var found = [];
+            emailsRaw.forEach(function(em, i) {
+                var subj = (em.subject || '').toLowerCase();
+                if (subj.indexOf(src) >= 0 || src.indexOf(subj) >= 0) found.push(i);
+            });
+            return found;
+        }
+
         items.forEach(function(d) {
             var card = document.createElement('div');
-            card.className = 'ddl-card u-' + (d.urgency || 'low');
+            var indices = Array.isArray(d.idx) ? d.idx.filter(function(i) { return typeof i === 'number' && i >= 0 && i < emailsRaw.length; }) : [];
+            if (indices.length === 0 && d.source) indices = findIndicesBySource(d.source);
+            card.className = 'ddl-card u-' + (d.urgency || 'low') + (indices.length > 0 ? ' clickable' : '');
             var urgLabel = { high: 'URGENT', medium: 'THIS WEEK', low: 'UPCOMING' };
             var cd = '';
             if (d.date) {
@@ -912,6 +934,9 @@ footer {
                     '<div class="ddl-date">&#x1f4c5; ' + (d.date || 'TBD') + '</div>' +
                     (cd ? '<div class="ddl-cd">' + cd + '</div>' : '') +
                 '</div>';
+            if (indices.length > 0) {
+                card.addEventListener('click', function() { showEmailModal(indices); });
+            }
             gridEl.appendChild(card);
         });
     }

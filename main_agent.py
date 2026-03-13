@@ -233,6 +233,8 @@ def get_deadline_data(emails):
     """Extract deadlines, action items, and important dates."""
     print("Claude is extracting deadlines...")
     today = datetime.now().strftime('%Y-%m-%d')
+    indexed = [{"index": i, **e} for i, e in enumerate(emails)]
+    max_idx = len(emails) - 1
     prompt = f"""You are a personal email assistant. Context about the user: {CONFIG['MY_CONTEXT']}.
 Today is {today}. Extract all deadlines, action items, and important dates from these emails.
 
@@ -240,15 +242,16 @@ Requirements:
 1. Identify items with explicit or implied deadlines
 2. Identify action items (even without a clear date, suggest a reasonable deadline)
 3. Return pure JSON array:
-   [{{"title": "Item name", "date": "YYYY-MM-DD", "source": "Source email subject", "urgency": "high/medium/low", "description": "Brief explanation"}}]
-4. Urgency rules:
+   [{{"title": "Item name", "date": "YYYY-MM-DD", "source": "Source email subject", "urgency": "high/medium/low", "description": "Brief explanation", "idx": [0]}}]
+4. idx field: the email index (range 0~{max_idx}) this DDL corresponds to; must be a real index from the data
+5. Urgency rules:
    - high: due within 3 days or overdue
    - medium: due within a week
    - low: more than a week out
-5. If no deadlines found, return empty array []
-6. Return pure JSON only, no markdown code blocks, no explanation
+6. If no deadlines found, return empty array []
+7. Return pure JSON only, no markdown code blocks, no explanation
 
-Emails: {json.dumps(emails, ensure_ascii=False)}"""
+Emails ({len(emails)} total, index range 0~{max_idx}): {json.dumps(indexed, ensure_ascii=False)}"""
 
     response = client.messages.create(
         model="claude-haiku-4-5", max_tokens=2000,
@@ -261,6 +264,19 @@ Emails: {json.dumps(emails, ensure_ascii=False)}"""
         return json.loads(content)
     except json.JSONDecodeError:
         return []
+
+
+def validate_and_fix_ddl_indices(deadline_data, email_count):
+    """Validate DDL idx values, filter out-of-range indices."""
+    for item in deadline_data:
+        if not isinstance(item, dict) or 'idx' not in item:
+            item['idx'] = []
+            continue
+        original = item['idx'] if isinstance(item['idx'], list) else [item['idx']]
+        valid = [i for i in original
+                 if isinstance(i, int) and 0 <= i < email_count]
+        item['idx'] = valid
+    return deadline_data
 
 
 def validate_and_fix_indices(structured_data, email_count):
@@ -297,6 +313,7 @@ if __name__ == "__main__":
             structured_json, len(emails))
         wordcloud_data = get_wordcloud_data(emails)
         deadline_data = get_deadline_data(emails)
+        deadline_data = validate_and_fix_ddl_indices(deadline_data, len(emails))
         output_path = os.path.join(SCRIPT_DIR, "dashboard.html")
         render_dashboard(structured_json, wordcloud_data, deadline_data,
                          emails, output_path)
