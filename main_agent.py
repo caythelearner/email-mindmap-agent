@@ -3,8 +3,7 @@ import json
 import sys
 import os
 import re
-from datetime import datetime
-from email.utils import parsedate_to_datetime
+from datetime import datetime, timedelta
 from anthropic import Anthropic
 from visualizer import render_dashboard
 
@@ -30,35 +29,98 @@ CONFIG = load_config()
 client = Anthropic(api_key=CONFIG["ANTHROPIC_API_KEY"])
 
 
-def parse_date(date_str):
-    """Parse email date header into 'MM-DD HH:MM' format."""
+def _get_filter_config():
+    """Get filter config. Exclude filters (promotions, social, etc.) are in Dashboard UI."""
+    f = CONFIG.get("FILTER") or {}
+    return {
+        "TIME_RANGE": f.get("TIME_RANGE"),
+        "INCLUDE_LABEL": f.get("INCLUDE_LABEL"),
+        "INCLUDE_SENDERS": f.get("INCLUDE_SENDERS"),
+    }
+
+
+def build_gmail_query():
+    """Build Gmail search query from config FILTER.
+    See: https://developers.google.com/gmail/api/reference/rest/v1/users.messages/list
+    See: https://support.google.com/mail/answer/7190
+    """
+    cfg = _get_filter_config()
+    parts = []
+
+    tr = cfg["TIME_RANGE"]
+    if tr:
+        today = datetime.now().date()
+        if tr == "7d":
+            start = today - timedelta(days=7)
+        elif tr == "30d":
+            start = today - timedelta(days=30)
+        elif tr == "1m":
+            start = today - timedelta(days=30)
+        else:
+            start = None
+        if start:
+            parts.append(f"after:{start.year}/{start.month:02d}/{start.day:02d}")
+
+    label = cfg["INCLUDE_LABEL"]
+    if label:
+        parts.append(f"label:{label}")
+
+    senders = cfg["INCLUDE_SENDERS"]
+    if senders and isinstance(senders, list) and len(senders) > 0:
+        or_parts = [f"from:{s.strip()}" for s in senders if s and str(s).strip()]
+        if or_parts:
+            parts.append("(" + " OR ".join(or_parts) + ")")
+    elif senders and isinstance(senders, str) and senders.strip():
+        parts.append(f"from:{senders.strip()}")
+
+    return " ".join(parts) if parts else None
+
+
+def _parse_datetime(date_str):
     if not date_str or not date_str.strip():
-        return "Unknown"
+        return None
     try:
-        dt = parsedate_to_datetime(date_str)
-        return dt.strftime('%m-%d %H:%M')
+        from email.utils import parsedate_to_datetime
+        return parsedate_to_datetime(date_str)
     except Exception:
         try:
             parts = date_str.split()
             if len(parts) < 5:
-                return "Unknown"
-            dt = datetime.strptime(
+                return None
+            return datetime.strptime(
                 f"{parts[1]} {parts[2]} {parts[3]} {parts[4]}",
                 '%d %b %Y %H:%M:%S')
-            return dt.strftime('%m-%d %H:%M')
         except (IndexError, ValueError):
-            return "Unknown"
+            return None
+
+
+def parse_date(date_str):
+    """Return display format MM-DD HH:MM"""
+    dt = _parse_datetime(date_str)
+    return dt.strftime('%m-%d %H:%M') if dt else "Unknown"
+
+
+def parse_date_iso(date_str):
+    """Return YYYY-MM-DD for filtering."""
+    dt = _parse_datetime(date_str)
+    return dt.strftime('%Y-%m-%d') if dt else None
 
 
 def fetch_data():
     """Fetch recent emails via gws CLI."""
-    print(f"Fetching the latest {CONFIG['MAX_EMAILS']} emails...")
-    params = json.dumps({
-        "userId": CONFIG["GMAIL_USER_ID"],
-        "maxResults": CONFIG["MAX_EMAILS"]
-    })
+    query = build_gmail_query()
+    filter_desc = []
+    if query:
+        filter_desc.append(f"filter: {query[:60]}{'...' if len(query) > 60 else ''}")
+    print(f"Fetching the latest {CONFIG['MAX_EMAILS']} emails" +
+          (" (" + "; ".join(filter_desc) + ")" if filter_desc else "") + "...")
+
+    params = {"userId": CONFIG["GMAIL_USER_ID"], "maxResults": CONFIG["MAX_EMAILS"]}
+    if query:
+        params["q"] = query
+
     res = subprocess.run(
-        ["gws", "gmail", "users", "messages", "list", "--params", params],
+        ["gws", "gmail", "users", "messages", "list", "--params", json.dumps(params)],
         capture_output=True, text=True, encoding='utf-8', shell=True)
 
     try:
@@ -81,13 +143,23 @@ def fetch_data():
         headers = msg_data.get('payload', {}).get('headers', [])
         date_raw = next(
             (h['value'] for h in headers if h['name'] == 'Date'), "")
+        from_val = next(
+            (h['value'] for h in headers if h['name'] == 'From'), "")
+        label_ids = msg_data.get('labelIds', [])
         emails.append({
             "date": parse_date(date_raw),
+            "date_iso": parse_date_iso(date_raw),
             "subject": next(
                 (h['value'] for h in headers if h['name'] == 'Subject'),
                 "No Subject"),
-            "snippet": msg_data.get('snippet', "")
+            "snippet": msg_data.get('snippet', ""),
+            "from": from_val,
+            "labelIds": label_ids
         })
+
+    print(f"  -> API returned {len(emails)} emails (use Dashboard to filter by category/keywords)")
+    if len(emails) < CONFIG["MAX_EMAILS"] and query:
+        print(f"  Tip: Try TIME_RANGE: \"30d\" or null in config for more emails")
     return emails
 
 

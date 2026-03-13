@@ -80,6 +80,40 @@ header {
     background: linear-gradient(135deg, #a5b4fc, #c4b5fd, #f0abfc);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
+.header-right {
+    display: flex; align-items: center; gap: 24px;
+}
+.filter-bar {
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+}
+.date-filter-bar, .exclude-filter-bar {
+    display: flex; align-items: center; gap: 10px;
+}
+.exclude-filter-bar { flex-wrap: wrap; }
+.exclude-check {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 0.8rem; color: var(--text-muted); cursor: pointer;
+    user-select: none;
+}
+.exclude-check:hover { color: var(--text-secondary); }
+.exclude-check input { cursor: pointer; }
+.date-filter-label { color: var(--text-muted); font-size: 0.82rem; }
+.date-filter-btns { display: flex; gap: 4px; }
+.date-filter-btn {
+    padding: 6px 14px; border-radius: 8px;
+    font-size: 0.8rem; font-weight: 500;
+    color: var(--text-muted); cursor: pointer;
+    border: 1px solid var(--border);
+    background: transparent; transition: all 0.2s;
+    font-family: inherit;
+}
+.date-filter-btn:hover {
+    color: var(--text-secondary); border-color: rgba(255,255,255,0.15);
+}
+.date-filter-btn.active {
+    color: #c7d2fe; background: rgba(99,102,241,0.15);
+    border-color: rgba(99,102,241,0.35);
+}
 .header-meta { color: var(--text-muted); font-size: 0.82rem; }
 
 nav {
@@ -349,7 +383,26 @@ footer {
         <div class="logo-mark">E</div>
         <span class="logo-text">Email Intelligence Hub</span>
     </div>
-    <div class="header-meta">__TIME_NOW__</div>
+    <div class="header-right">
+        <div class="filter-bar">
+            <div class="date-filter-bar">
+                <span class="date-filter-label">Date:</span>
+                <div class="date-filter-btns">
+                    <button class="date-filter-btn active" data-range="all">All</button>
+                    <button class="date-filter-btn" data-range="7d">7 days</button>
+                    <button class="date-filter-btn" data-range="30d">30 days</button>
+                </div>
+            </div>
+            <div class="exclude-filter-bar">
+                <span class="date-filter-label">Exclude:</span>
+                <label class="exclude-check"><input type="checkbox" id="exclude-promotions"> Promotions</label>
+                <label class="exclude-check"><input type="checkbox" id="exclude-social"> Social</label>
+                <label class="exclude-check"><input type="checkbox" id="exclude-updates"> Updates</label>
+                <label class="exclude-check" title="Exclude emails with unsubscribe, newsletter, etc. in subject/snippet"><input type="checkbox" id="exclude-keywords"> Keywords</label>
+            </div>
+        </div>
+        <div class="header-meta">__TIME_NOW__</div>
+    </div>
 </header>
 
 <nav>
@@ -429,6 +482,119 @@ footer {
     var dlRaw      = __DL_JSON__;
     var emailsRaw  = __EMAILS_JSON__;
 
+    /* ===== Filter state ===== */
+    var EXCLUDE_KEYWORDS = ['unsubscribe', 'newsletter', 'marketing'];
+    var currentDateRange = 'all';
+
+    function getVisibleIndices(range) {
+        var excludePromo = document.getElementById('exclude-promotions') && document.getElementById('exclude-promotions').checked;
+        var excludeSocial = document.getElementById('exclude-social') && document.getElementById('exclude-social').checked;
+        var excludeUpdates = document.getElementById('exclude-updates') && document.getElementById('exclude-updates').checked;
+        var excludeKw = document.getElementById('exclude-keywords') && document.getElementById('exclude-keywords').checked;
+
+        var visible = new Set();
+        var today = new Date(); today.setHours(0,0,0,0);
+        var cutoff = range === '7d' ? (function(){ var d=new Date(today); d.setDate(d.getDate()-7); return d; })() :
+                     range === '30d' ? (function(){ var d=new Date(today); d.setDate(d.getDate()-30); return d; })() : null;
+
+        emailsRaw.forEach(function(em, idx) {
+            var labels = em.labelIds || [];
+            if (excludePromo && labels.indexOf('CATEGORY_PROMOTIONS') >= 0) return;
+            if (excludeSocial && labels.indexOf('CATEGORY_SOCIAL') >= 0) return;
+            if (excludeUpdates && labels.indexOf('CATEGORY_UPDATES') >= 0) return;
+            if (excludeKw) {
+                var text = ((em.subject || '') + ' ' + (em.snippet || '')).toLowerCase();
+                if (EXCLUDE_KEYWORDS.some(function(k) { return k && text.indexOf(k.toLowerCase()) >= 0; })) return;
+            }
+            if (cutoff) {
+                var iso = em.date_iso;
+                if (!iso) { visible.add(idx); return; }
+                if (new Date(iso + 'T12:00:00') >= cutoff) visible.add(idx);
+            } else {
+                visible.add(idx);
+            }
+        });
+        return visible;
+    }
+
+    function buildFilteredTree(cats, visibleIndices) {
+        var filterFn = function(indices) {
+            if (!visibleIndices) return indices.length > 0;
+            return indices.some(function(i) { return visibleIndices.has(i); });
+        };
+        var children = Object.entries(cats).map(function(entry) {
+            var cat = entry[0], items = entry[1];
+            var c = COLORS[Object.keys(cats).indexOf(cat) % COLORS.length];
+            var list = Array.isArray(items) ? items : [items];
+            var filtered = list.filter(Boolean).map(function(t) {
+                var isObj = typeof t === 'object' && t !== null;
+                var aiText = isObj ? String(t.text || '') : String(t);
+                var rawIndices = isObj && Array.isArray(t.idx) ? t.idx : [];
+                var indices = rawIndices.filter(function(idx) {
+                    return typeof idx === 'number' && idx >= 0 && idx < emailsRaw.length;
+                });
+                if (!filterFn(indices)) return null;
+                var label = aiText;
+                if (indices.length === 1) {
+                    var origSubj = getOriginalSubject(indices[0]);
+                    if (origSubj && origSubj !== aiText) label = aiText + ' [' + origSubj + ']';
+                }
+                var hasValidLink = indices.length > 0;
+                return {
+                    name: label,
+                    aiText: aiText,
+                    emailIndices: indices,
+                    itemStyle: { color: c, borderColor: hasValidLink ? '#818cf8' : c, opacity: hasValidLink ? 0.85 : 0.5, borderWidth: hasValidLink ? 2 : 0 },
+                    lineStyle: { color: c, opacity: 0.35 }
+                };
+            }).filter(Boolean);
+            if (filtered.length === 0) return null;
+            return {
+                name: cat,
+                itemStyle: { color: c, borderColor: c },
+                lineStyle: { color: c, opacity: 0.5 },
+                children: filtered
+            };
+        }).filter(Boolean);
+        return {
+            name: 'Email Hub',
+            itemStyle: { color: '#6366f1', borderColor: '#818cf8', borderWidth: 3 },
+            children: children.length ? children : [{ name: '(No emails in this range)', itemStyle: { opacity: 0.5 }, lineStyle: { opacity: 0.2 } }]
+        };
+    }
+
+    function applyDateFilter(range) {
+        currentDateRange = range;
+        var visible = getVisibleIndices(range);
+        var tree = buildFilteredTree(categories, visible);
+        var layout = document.querySelector('.seg-btn[data-layout].active');
+        mmChart.setOption(mmOption(layout ? layout.dataset.layout : 'radial', tree), true);
+        currentDdlData = range === 'all' ? dlRaw : dlRaw.filter(function(d) {
+            if (!d.date) return true;
+            var dDate = new Date(d.date + 'T12:00:00');
+            var today = new Date(); today.setHours(0,0,0,0);
+            var cutoff = new Date(today);
+            if (range === '7d') cutoff.setDate(cutoff.getDate() - 7);
+            else if (range === '30d') cutoff.setDate(cutoff.getDate() - 30);
+            return dDate >= cutoff;
+        });
+        renderDDL(currentUrgencyFilter);
+    }
+
+    document.querySelectorAll('.date-filter-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.date-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+            this.classList.add('active');
+            currentDateRange = this.dataset.range;
+            applyDateFilter(currentDateRange);
+        });
+    });
+
+    ['exclude-promotions','exclude-social','exclude-updates','exclude-keywords'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('change', function() { applyDateFilter(currentDateRange); });
+    });
+
     /* ===== Tab switching ===== */
     var tabs = document.querySelectorAll('.tab');
     var panels = document.querySelectorAll('.panel');
@@ -465,58 +631,11 @@ footer {
         return '';
     }
 
-    function buildTree(cats) {
-        var entries = Object.entries(cats);
-        var children = entries.map(function(entry, i) {
-            var cat = entry[0], items = entry[1];
-            var c = COLORS[i % COLORS.length];
-            var list = Array.isArray(items) ? items : [items];
-            return {
-                name: cat,
-                itemStyle: { color: c, borderColor: c },
-                lineStyle: { color: c, opacity: 0.5 },
-                children: list.filter(Boolean).map(function(t) {
-                    var isObj = typeof t === 'object' && t !== null;
-                    var aiText = isObj ? String(t.text || '') : String(t);
-                    var rawIndices = isObj && Array.isArray(t.idx) ? t.idx : [];
-                    var indices = rawIndices.filter(function(idx) {
-                        return typeof idx === 'number' && idx >= 0 && idx < emailsRaw.length;
-                    });
-
-                    var label = aiText;
-                    if (indices.length === 1) {
-                        var origSubj = getOriginalSubject(indices[0]);
-                        if (origSubj && origSubj !== aiText) {
-                            label = aiText + ' [' + origSubj + ']';
-                        }
-                    }
-
-                    var hasValidLink = indices.length > 0;
-                    return {
-                        name: label,
-                        aiText: aiText,
-                        emailIndices: indices,
-                        itemStyle: {
-                            color: c, borderColor: hasValidLink ? '#818cf8' : c,
-                            opacity: hasValidLink ? 0.85 : 0.5,
-                            borderWidth: hasValidLink ? 2 : 0
-                        },
-                        lineStyle: { color: c, opacity: 0.35 }
-                    };
-                })
-            };
-        });
-        return {
-            name: 'Email Hub',
-            itemStyle: { color: '#6366f1', borderColor: '#818cf8', borderWidth: 3 },
-            children: children
-        };
-    }
-
-    var treeData = buildTree(categories);
+    var treeData = buildFilteredTree(categories, null);
     var mmChart = echarts.init(document.getElementById('mindmap-chart'));
 
-    function mmOption(layout) {
+    function mmOption(layout, treeDataToUse) {
+        var tree = treeDataToUse || treeData;
         var isRadial = layout === 'radial';
         var orient = layout === 'tb' ? 'TB' : 'LR';
         return {
@@ -544,7 +663,7 @@ footer {
             },
             series: [{
                 type: 'tree',
-                data: [treeData],
+                data: [tree],
                 layout: isRadial ? 'radial' : 'orthogonal',
                 orient: isRadial ? undefined : orient,
                 roam: true,
@@ -590,7 +709,8 @@ footer {
         btn.addEventListener('click', function() {
             document.querySelectorAll('.seg-btn[data-layout]').forEach(function(b) { b.classList.remove('active'); });
             this.classList.add('active');
-            mmChart.setOption(mmOption(this.dataset.layout), true);
+            var tree = buildFilteredTree(categories, getVisibleIndices(currentDateRange));
+            mmChart.setOption(mmOption(this.dataset.layout, tree), true);
         });
     });
 
@@ -626,6 +746,7 @@ footer {
             card.innerHTML =
                 '<div class="email-detail-label">Subject</div>' +
                 '<div class="email-detail-subject">' + escapeHtml(subject) + '</div>' +
+                (email.from ? '<div class="email-detail-date">&#x1f464; ' + escapeHtml(email.from) + '</div>' : '') +
                 '<div class="email-detail-date">&#x1f4c5; ' + escapeHtml(email.date || 'Unknown') + '</div>' +
                 '<div class="email-detail-label">Email Snippet</div>' +
                 '<div class="email-detail-snippet">' + escapeHtml(email.snippet || 'No content available') + '</div>' +
@@ -713,6 +834,9 @@ footer {
     var urgOrder = { high: 0, medium: 1, low: 2 };
     dlRaw.sort(function(a, b) { return (urgOrder[a.urgency] || 3) - (urgOrder[b.urgency] || 3); });
 
+    var currentDdlData = dlRaw;
+    var currentUrgencyFilter = 'all';
+
     var counts = { high: 0, medium: 0, low: 0, all: dlRaw.length };
     dlRaw.forEach(function(d) { counts[d.urgency] = (counts[d.urgency] || 0) + 1; });
 
@@ -751,6 +875,7 @@ footer {
         btn.addEventListener('click', function() {
             document.querySelectorAll('.ddl-filter-btn').forEach(function(b) { b.classList.remove('active'); });
             this.classList.add('active');
+            currentUrgencyFilter = this.dataset.filter;
             renderDDL(this.dataset.filter);
         });
         filtersEl.appendChild(btn);
@@ -759,7 +884,7 @@ footer {
     function renderDDL(filter) {
         var gridEl = document.getElementById('ddl-grid');
         gridEl.innerHTML = '';
-        var items = filter === 'all' ? dlRaw : dlRaw.filter(function(d) { return d.urgency === filter; });
+        var items = filter === 'all' ? currentDdlData : currentDdlData.filter(function(d) { return d.urgency === filter; });
 
         if (items.length === 0) {
             gridEl.innerHTML = '<div class="ddl-empty"><div class="ddl-empty-icon">&#x2705;</div><p>No items in this category</p></div>';

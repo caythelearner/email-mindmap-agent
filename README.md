@@ -40,8 +40,9 @@ cp config.example.json config.json
 |-------|-------------|
 | `ANTHROPIC_API_KEY` | Your Anthropic API key |
 | `GMAIL_USER_ID` | Usually `"me"` (current authenticated user) |
-| `MAX_EMAILS` | Number of recent emails to fetch (default: 10) |
+| `MAX_EMAILS` | Number of recent emails to fetch (default: 30) |
 | `MY_CONTEXT` | Your background info so the AI understands your emails better |
+| `FILTER` | Optional: `TIME_RANGE`, `INCLUDE_LABEL`, `INCLUDE_SENDERS`. See [FILTER_README.md](FILTER_README.md) |
 
 ## Usage
 
@@ -54,6 +55,8 @@ This generates `dashboard.html` and opens it in your browser with three interact
 1. **Mind Map** — Switch between radial/horizontal/vertical layouts. Click leaf nodes to see original email content and verify AI summaries.
 2. **Word Cloud** — Visual keyword analysis with top-10 sidebar
 3. **DDL Tracker** — Filter by urgency (Urgent / This Week / Later)
+
+**Dashboard filters** (header): Date range (All / 7 days / 30 days) and exclude filters (Promotions, Social, Updates, Keywords) — no re-run needed.
 
 ## Gmail Authorization
 
